@@ -11,6 +11,12 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 
+#include "TimerManager.h"
+#include "DrawDebugHelpers.h"
+#include "Kismet/GameplayStatics.h"
+#include "Engine/World.h"
+#include "Animation/AnimInstance.h"
+
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
 //////////////////////////////////////////////////////////////////////////
@@ -32,9 +38,9 @@ ATSPCaptureCharacter::ATSPCaptureCharacter()
 
 	// Note: For faster iteration times these variables, and many more, can be tweaked in the Character Blueprint
 	// instead of recompiling to adjust them
-	GetCharacterMovement()->JumpZVelocity = 3000.f;
+	GetCharacterMovement()->JumpZVelocity = 700.f;
 	GetCharacterMovement()->AirControl = 0.35f;
-	GetCharacterMovement()->MaxWalkSpeed = 5000.f;
+	GetCharacterMovement()->MaxWalkSpeed = 500.f;
 	GetCharacterMovement()->MinAnalogWalkSpeed = 20.f;
 	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
@@ -85,6 +91,9 @@ void ATSPCaptureCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 
 		// Looking
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ATSPCaptureCharacter::Look);
+
+		// Punching
+		EnhancedInputComponent->BindAction(PunchAction, ETriggerEvent::Started, this, &ATSPCaptureCharacter::Punch);
 	}
 	else
 	{
@@ -126,4 +135,111 @@ void ATSPCaptureCharacter::Look(const FInputActionValue& Value)
 		AddControllerYawInput(LookAxisVector.X);
 		AddControllerPitchInput(LookAxisVector.Y);
 	}
+}
+
+void ATSPCaptureCharacter::Punch(const FInputActionValue& Value)
+{
+	if (bIsPunching)
+	{
+		UE_LOG(LogTemplateCharacter, Warning, TEXT("Already Punching"));
+		return;
+	}
+
+	if (!PunchMontage || !GetMesh() || !GetMesh()->GetAnimInstance())
+	{
+		UE_LOG(LogTemplateCharacter, Warning, TEXT("PunchMontage or AnimInstance is not valid"));
+		return;
+	}
+
+	bIsPunching = true;
+	UE_LOG(LogTemplateCharacter, Warning, TEXT("Punch Start"));
+
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	const float Duration = AnimInstance->Montage_Play(PunchMontage);
+
+	if (Duration > 0.f)
+	{
+		FOnMontageEnded EndDelegate;
+		EndDelegate.BindUObject(this, &ATSPCaptureCharacter::OnPunchMontageEnded);
+		AnimInstance->Montage_SetEndDelegate(EndDelegate, PunchMontage);
+	}
+	else
+	{
+		EndPunch();
+	}
+}
+
+void ATSPCaptureCharacter::EndPunch()
+{
+	bIsPunching = false;
+	UE_LOG(LogTemplateCharacter, Warning, TEXT("Punch End"));
+}
+
+void ATSPCaptureCharacter::PerformPunchHit()
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	const FVector Start = GetActorLocation() + FVector(0.f, 0.f, 50.f);
+	const FVector End = Start + (GetActorForwardVector() * PunchRange);
+
+	FCollisionShape Sphere = FCollisionShape::MakeSphere(PunchRadius);
+
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this);
+
+	FHitResult HitResult;
+	const bool bHit = GetWorld()->SweepSingleByChannel(
+		HitResult,
+		Start,
+		End,
+		FQuat::Identity,
+		ECC_Pawn,
+		Sphere,
+		QueryParams
+	);
+
+	const FColor DebugColor = bHit ? FColor::Red : FColor::Green;
+	DrawDebugCapsule(
+		GetWorld(),
+		(Start + End) * 0.5f,
+		PunchRange * 0.5f,
+		PunchRadius,
+		FRotationMatrix::MakeFromX(End - Start).ToQuat(),
+		DebugColor,
+		false,
+		1.5f
+	);
+
+	if (bHit && HitResult.GetActor())
+	{
+		UE_LOG(LogTemplateCharacter, Warning, TEXT("Hit: %s"), *HitResult.GetActor()->GetName());
+
+		UGameplayStatics::ApplyDamage(
+			HitResult.GetActor(),
+			PunchDamage,
+			GetController(),
+			this,
+			UDamageType::StaticClass()
+		);
+	}
+}
+
+void ATSPCaptureCharacter::TriggerPunchHit()
+{
+	PerformPunchHit();
+}
+
+void ATSPCaptureCharacter::OnPunchMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (Montage != PunchMontage)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemplateCharacter, Warning, TEXT("Punch Montage Ended (Interrupted: %s)"), bInterrupted ? TEXT("true") : TEXT("false"));
+
+	EndPunch();
 }
