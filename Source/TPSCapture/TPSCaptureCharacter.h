@@ -64,9 +64,6 @@ protected:
 	/** Called for looking input */
 	void Look(const FInputActionValue& Value);
 
-	///** Called when the punch action is completed to reset the punching state */
-	//void EndPunch();
-
 protected:
 	/** Animation montage for the punch attack */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation", meta = (AllowPrivateAccess = "true"))
@@ -85,9 +82,6 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat") // 판정 구 크기
 	float PunchRadius = 50.0f;
-
-	//UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat") // 공격 시작 후 얼마 뒤에 맞출지
-	//float PunchHitDelay = 0.15f;
 
 	FTimerHandle PunchHitTimerHandle;
 	void PerformPunchHit();
@@ -114,9 +108,6 @@ protected:
 	void StartComboAttack();
 
 	void QueueComboInput();
-
-	//UFUNCTION()
-	//void OnPunchMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
 	UFUNCTION(BlueprintCallable)
 	void EnableComboWindow();
