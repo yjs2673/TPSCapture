@@ -49,18 +49,12 @@ class ATSPCaptureCharacter : public ACharacter
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	UInputAction* PunchAction;
 
-	/** State to track if the character is currently punching */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
-	bool bIsPunching = false;
-	FTimerHandle PunchTimerHandle;
-
-	/** Animation montage for the punch attack */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation", meta = (AllowPrivateAccess = "true"))
-	UAnimMontage* PunchMontage;
-
 public:
 	ATSPCaptureCharacter();
 	
+public:
+	/** Called for Punch input */
+	void Punch(const FInputActionValue& Value);
 
 protected:
 
@@ -69,14 +63,19 @@ protected:
 
 	/** Called for looking input */
 	void Look(const FInputActionValue& Value);
-			
-	/** Called for Punch input */
-	void Punch(const FInputActionValue& Value);
 
-	/** Called when the punch action is completed to reset the punching state */
-	void EndPunch();
+	///** Called when the punch action is completed to reset the punching state */
+	//void EndPunch();
 
 protected:
+	/** Animation montage for the punch attack */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation", meta = (AllowPrivateAccess = "true"))
+	UAnimMontage* PunchMontage;
+
+	/** State to track if the character is currently punching */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
+	bool bIsPunching = false;
+	//FTimerHandle PunchTimerHandle;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat") // 한 번 때릴 때 데미지
 	float PunchDamage = 20.0f;
@@ -98,6 +97,35 @@ protected:
 
 	UFUNCTION() // 애니메이션 몽타주가 끝났을 때 호출되는 함수
 	void OnPunchMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	bool bComboInputBuffered = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	bool bCanAcceptComboInput = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	int32 CurrentComboIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
+	int32 MaxComboCount = 3;
+
+protected:
+	void StartComboAttack();
+
+	void QueueComboInput();
+
+	//UFUNCTION()
+	//void OnPunchMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
+	UFUNCTION(BlueprintCallable)
+	void EnableComboWindow();
+
+	UFUNCTION(BlueprintCallable)
+	void DisableComboWindow();
+
+	UFUNCTION(BlueprintCallable)
+	void ProceedCombo();
 
 protected:
 

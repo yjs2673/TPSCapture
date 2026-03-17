@@ -139,41 +139,20 @@ void ATSPCaptureCharacter::Look(const FInputActionValue& Value)
 
 void ATSPCaptureCharacter::Punch(const FInputActionValue& Value)
 {
-	if (bIsPunching)
+	if (!bIsPunching)
 	{
-		UE_LOG(LogTemplateCharacter, Warning, TEXT("Already Punching"));
+		StartComboAttack();
 		return;
 	}
 
-	if (!PunchMontage || !GetMesh() || !GetMesh()->GetAnimInstance())
-	{
-		UE_LOG(LogTemplateCharacter, Warning, TEXT("PunchMontage or AnimInstance is not valid"));
-		return;
-	}
-
-	bIsPunching = true;
-	UE_LOG(LogTemplateCharacter, Warning, TEXT("Punch Start"));
-
-	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-	const float Duration = AnimInstance->Montage_Play(PunchMontage);
-
-	if (Duration > 0.f)
-	{
-		FOnMontageEnded EndDelegate;
-		EndDelegate.BindUObject(this, &ATSPCaptureCharacter::OnPunchMontageEnded);
-		AnimInstance->Montage_SetEndDelegate(EndDelegate, PunchMontage);
-	}
-	else
-	{
-		EndPunch();
-	}
+	QueueComboInput();
 }
 
-void ATSPCaptureCharacter::EndPunch()
-{
-	bIsPunching = false;
-	UE_LOG(LogTemplateCharacter, Warning, TEXT("Punch End"));
-}
+//void ATSPCaptureCharacter::EndPunch()
+//{
+//	bIsPunching = false;
+//	UE_LOG(LogTemplateCharacter, Warning, TEXT("Punch End"));
+//}
 
 void ATSPCaptureCharacter::PerformPunchHit()
 {
@@ -229,7 +208,111 @@ void ATSPCaptureCharacter::PerformPunchHit()
 
 void ATSPCaptureCharacter::TriggerPunchHit()
 {
+	UE_LOG(LogTemplateCharacter, Warning, TEXT("TriggerPunchHit"));
 	PerformPunchHit();
+}
+
+//void ATSPCaptureCharacter::OnPunchMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+//{
+//	if (Montage != PunchMontage)
+//	{
+//		return;
+//	}
+//
+//	UE_LOG(LogTemplateCharacter, Warning, TEXT("Punch Montage Ended (Interrupted: %s)"), bInterrupted ? TEXT("true") : TEXT("false"));
+//
+//	EndPunch();
+//}
+
+void ATSPCaptureCharacter::StartComboAttack()
+{
+	if (!PunchMontage || !GetMesh() || !GetMesh()->GetAnimInstance())
+	{
+		return;
+	}
+
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (!AnimInstance)
+	{
+		return;
+	}
+
+	bIsPunching = true;
+	bComboInputBuffered = false;
+	bCanAcceptComboInput = false;
+	CurrentComboIndex = 1;
+
+	AnimInstance->Montage_Play(PunchMontage);
+	AnimInstance->Montage_JumpToSection(FName("Combo1"), PunchMontage);
+
+	AnimInstance->OnMontageEnded.RemoveDynamic(this, &ATSPCaptureCharacter::OnPunchMontageEnded);
+	AnimInstance->OnMontageEnded.AddDynamic(this, &ATSPCaptureCharacter::OnPunchMontageEnded);
+
+	UE_LOG(LogTemplateCharacter, Warning, TEXT("Combo 1 Start"));
+}
+
+void ATSPCaptureCharacter::QueueComboInput()
+{
+	if (!bIsPunching)
+	{
+		return;
+	}
+
+	if (!bCanAcceptComboInput)
+	{
+		UE_LOG(LogTemplateCharacter, Warning, TEXT("Combo input ignored: not in combo window"));
+		return;
+	}
+
+	if (CurrentComboIndex >= MaxComboCount)
+	{
+		UE_LOG(LogTemplateCharacter, Warning, TEXT("Already at max combo"));
+		return;
+	}
+
+	bComboInputBuffered = true;
+	UE_LOG(LogTemplateCharacter, Warning, TEXT("Combo input buffered"));
+}
+
+void ATSPCaptureCharacter::ProceedCombo()
+{
+	if (!PunchMontage || !GetMesh() || !GetMesh()->GetAnimInstance())
+	{
+		return;
+	}
+
+	if (!bComboInputBuffered)
+	{
+		return;
+	}
+
+	if (CurrentComboIndex >= MaxComboCount)
+	{
+		return;
+	}
+
+	CurrentComboIndex++;
+	bComboInputBuffered = false;
+	bCanAcceptComboInput = false;
+
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	const FName NextSectionName = FName(*FString::Printf(TEXT("Combo%d"), CurrentComboIndex));
+
+	AnimInstance->Montage_JumpToSection(NextSectionName, PunchMontage);
+
+	UE_LOG(LogTemplateCharacter, Warning, TEXT("Proceed to %s"), *NextSectionName.ToString());
+}
+
+void ATSPCaptureCharacter::EnableComboWindow()
+{
+	bCanAcceptComboInput = true;
+	UE_LOG(LogTemplateCharacter, Warning, TEXT("Combo Window Open"));
+}
+
+void ATSPCaptureCharacter::DisableComboWindow()
+{
+	bCanAcceptComboInput = false;
+	UE_LOG(LogTemplateCharacter, Warning, TEXT("Combo Window Closed"));
 }
 
 void ATSPCaptureCharacter::OnPunchMontageEnded(UAnimMontage* Montage, bool bInterrupted)
@@ -239,7 +322,10 @@ void ATSPCaptureCharacter::OnPunchMontageEnded(UAnimMontage* Montage, bool bInte
 		return;
 	}
 
-	UE_LOG(LogTemplateCharacter, Warning, TEXT("Punch Montage Ended (Interrupted: %s)"), bInterrupted ? TEXT("true") : TEXT("false"));
+	bIsPunching = false;
+	bComboInputBuffered = false;
+	bCanAcceptComboInput = false;
+	CurrentComboIndex = 0;
 
-	EndPunch();
+	UE_LOG(LogTemplateCharacter, Warning, TEXT("Punch Montage Ended"));
 }
